@@ -1,0 +1,386 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>GTA VI Live Overlay</title>
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;900&display=swap" rel="stylesheet">
+<style>
+/* ===== BASE: marco 16:9 fijo, escalado proporcional ===== */
+:root{--cy:#00f0ff;--mg:#ff2bd6;--bg:rgba(10,6,28,.72);--tx:#f4f0ff;--f:'Orbitron','Segoe UI',Arial,sans-serif}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0;width:100%;height:100%;overflow:hidden;background:#000;font-family:'Segoe UI',Arial,sans-serif;color:var(--tx)}
+#stage{position:absolute;left:50%;top:50%;width:1920px;height:1080px;transform-origin:center;overflow:hidden;background:#0a061c}
+#bg,#bg iframe,#bg video{position:absolute;inset:0;width:100%;height:100%;border:0;object-fit:cover;pointer-events:none}
+/* Panel glassmorphism reutilizable */
+.glass{position:absolute;background:var(--bg);backdrop-filter:blur(10px);border:2px solid var(--cy);border-radius:14px;
+ box-shadow:0 0 18px rgba(0,240,255,.45),inset 0 0 22px rgba(255,43,214,.15);overflow:hidden}
+.glass.mg{border-color:var(--mg);box-shadow:0 0 18px rgba(255,43,214,.5),inset 0 0 22px rgba(0,240,255,.12)}
+.hd{font:700 20px var(--f);letter-spacing:2px;padding:10px 16px;display:flex;justify-content:space-between;align-items:center;
+ background:linear-gradient(90deg,rgba(0,240,255,.28),rgba(255,43,214,.28));text-shadow:0 0 8px var(--cy)}
+.live{color:#ff4d4d;font-size:16px;animation:bl 1.2s infinite}
+@keyframes bl{50%{opacity:.25}}
+
+/* ===== 1. NOTICIAS (amarillo) ===== */
+#news{left:30px;top:30px;width:640px;height:270px}
+#newsBody{position:relative;height:212px}
+.card{position:absolute;inset:0;padding:16px 20px;opacity:0;transform:translateX(60px);transition:all .7s ease}
+.card.on{opacity:1;transform:none}
+.card .src{font:700 17px var(--f);color:var(--cy)}
+.card .src span{color:#9aa;font-weight:500;margin-left:8px;font-family:'Segoe UI'}
+.card h3{margin:10px 0 0;font-size:27px;line-height:1.25}
+
+/* ===== 2. IMÁGENES / MEMES (rojo) ===== */
+#pics{left:30px;top:330px;width:640px;height:560px}
+#picBody{position:relative;height:502px;background:#000}
+#picBody img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:0;transition:opacity 1.2s ease}
+#picBody img.on{opacity:1}
+#picCap{position:absolute;left:0;right:0;bottom:0;padding:10px 16px;font:700 18px var(--f);background:linear-gradient(transparent,rgba(0,0,0,.85))}
+
+/* ===== 3. MARQUEE (verde) ===== */
+#marq{left:30px;top:950px;width:1860px;height:90px;display:flex;align-items:center;border-color:var(--mg)}
+#marq .tag{flex:none;height:100%;padding:0 28px;display:flex;align-items:center;font:900 24px var(--f);background:var(--mg);color:#fff;z-index:2}
+#marq .win{flex:1;overflow:hidden;height:100%;display:flex;align-items:center}
+#track{display:flex;white-space:nowrap;will-change:transform;animation:slide 60s linear infinite}
+#track span{font:700 32px var(--f);padding:0 50px;text-shadow:0 0 10px var(--cy)}
+#track span::after{content:"◆";color:var(--mg);margin-left:100px}
+@keyframes slide{from{transform:translateX(-50%)}to{transform:translateX(0)}} /* izquierda → derecha */
+
+/* ===== 4. CUENTA REGRESIVA ===== */
+#cd{left:1380px;top:30px;width:510px;height:190px;border-color:var(--mg)}
+#cdRow{display:flex;justify-content:space-around;padding:12px 8px 0}
+.u{text-align:center}
+.u b{display:block;font:900 56px var(--f);color:var(--cy);text-shadow:0 0 14px var(--cy),0 0 30px var(--mg)}
+.u i{font:500 14px var(--f);font-style:normal;color:#ffb3f2;letter-spacing:2px}
+
+/* ===== 5. CHAT ===== */
+#chat{left:1380px;top:250px;width:510px;height:640px}
+#msgs{height:582px;padding:10px 12px;display:flex;flex-direction:column;justify-content:flex-end;gap:10px;overflow:hidden}
+.m{display:flex;gap:10px;align-items:flex-start;animation:pop .4s ease}
+.av{flex:none;width:38px;height:38px;border-radius:50%;display:grid;place-items:center;font:700 18px var(--f);color:#000}
+.m p{margin:0;font-size:20px;line-height:1.25;word-break:break-word}
+.m p b{color:var(--cy);margin-right:8px}
+@keyframes pop{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
+
+/* ===== INTERRUPCIÓN ANTI-COPYRIGHT ===== */
+#intr{position:absolute;inset:0;z-index:50;display:none;align-items:center;justify-content:center;overflow:hidden}
+#intr.on{display:flex}
+#intr .noise{position:absolute;inset:-50%;background:repeating-radial-gradient(circle at 30% 40%,#fff 0 1px,#000 1px 3px);opacity:.28;animation:ns .12s steps(2) infinite;mix-blend-mode:screen}
+#intr.glitch{animation:gl .25s steps(3) 6;background:rgba(0,0,0,.35)}
+@keyframes ns{0%{transform:translate(0,0)}50%{transform:translate(-30px,20px)}100%{transform:translate(20px,-30px)}}
+@keyframes gl{0%{filter:hue-rotate(0)}50%{filter:hue-rotate(180deg) contrast(1.5);transform:translateX(12px)}100%{transform:none}}
+#pop{position:relative;width:1100px;padding:34px 44px;text-align:center;background:rgba(10,6,28,.92);border:4px solid var(--mg);border-radius:18px;
+ box-shadow:0 0 50px var(--mg),0 0 90px rgba(0,240,255,.5);animation:zi .4s ease}
+@keyframes zi{from{transform:scale(.6);opacity:0}}
+#pop .k{font:900 30px var(--f);color:#fff;background:#d4001a;display:inline-block;padding:6px 22px;letter-spacing:4px}
+#pop h2{font:900 52px/1.2 var(--f);margin:20px 0 0;text-shadow:0 0 16px var(--cy)}
+#pop img{width:100%;max-height:520px;object-fit:cover;border-radius:10px;margin-top:20px}
+
+/* ===== BOTÓN + PANEL DE CONTROL (fuera del escenario; oculto dentro de OBS) ===== */
+#gear{position:fixed;left:50%;top:8px;transform:translateX(-50%);padding:9px 22px;border:2px solid var(--cy);border-radius:30px;background:#120a2aee;color:#fff;font:700 15px var(--f);cursor:pointer;z-index:99;box-shadow:0 0 14px var(--cy)}
+body.obs #gear{display:none}
+#cfg{position:fixed;left:0;top:0;bottom:0;width:480px;background:#0d0820f4;border-right:2px solid var(--cy);z-index:100;display:none;flex-direction:column;font:14px 'Segoe UI',Arial}
+#cfg.on{display:flex}
+#cfg .top{display:flex;justify-content:space-between;padding:12px 16px;font:700 18px var(--f);background:linear-gradient(90deg,#00f0ff40,#ff2bd640)}
+#cfg .top span{cursor:pointer}
+#tabs{display:flex;flex-wrap:wrap;gap:4px;padding:8px}
+#tabs a{padding:7px 12px;border-radius:8px;background:#ffffff14;cursor:pointer}
+#tabs a.on{background:var(--mg)}
+.tab{display:none;padding:6px 16px 16px;overflow:auto;flex:1}
+.tab.on{display:block}
+#cfg label{display:block;margin:12px 0 4px;color:var(--cy);font-weight:700}
+#cfg input:not([type=checkbox]),#cfg textarea,#cfg select{width:100%;padding:8px;background:#000;color:#fff;border:1px solid #567;border-radius:6px;font:13px Consolas,monospace}
+#cfg textarea{height:170px}
+#cfg small{display:block;margin-top:6px;color:#a9a3c4;line-height:1.4}
+#cfg button{margin:8px 6px 0 0;padding:8px 12px;border:0;border-radius:6px;background:#3a2c6e;color:#fff;cursor:pointer;font-weight:700}
+#cfg .foot{padding:10px 16px;border-top:1px solid #567}
+#cfg .foot #cSave{background:var(--mg);font-size:15px;padding:10px 18px}
+.pl{display:flex;gap:8px;align-items:center;margin-top:8px}
+.pl img{width:64px;height:44px;object-fit:cover;border-radius:4px}
+.pl span{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pl b{cursor:pointer;color:#ff6b6b;padding:4px 8px}
+body.nobg,body.nobg html,body.nobg #stage{background:transparent!important}
+html:has(body.nobg){background:transparent}
+</style>
+</head>
+<body>
+<div id="stage">
+  <div id="bg"></div>
+
+  <!-- 1. Noticias estilo X -->
+  <section class="glass" id="news">
+    <div class="hd"><span>𝕏 BREAKING · GTA VI</span><span class="live">● EN VIVO</span></div>
+    <div id="newsBody"></div>
+  </section>
+
+  <!-- 2. Imágenes y memes -->
+  <section class="glass mg" id="pics">
+    <div class="hd"><span>COMUNIDAD · MEMES</span><span class="live">●</span></div>
+    <div id="picBody"><div id="picCap"></div></div>
+  </section>
+
+  <!-- 4. Cuenta regresiva -->
+  <section class="glass mg" id="cd">
+    <div class="hd"><span>GTA VI · 19 NOV 2026</span></div>
+    <div id="cdRow">
+      <div class="u"><b id="d">00</b><i>DÍAS</i></div><div class="u"><b id="h">00</b><i>HORAS</i></div>
+      <div class="u"><b id="mi">00</b><i>MIN</i></div><div class="u"><b id="s">00</b><i>SEG</i></div>
+    </div>
+  </section>
+
+  <!-- 5. Chat -->
+  <section class="glass" id="chat">
+    <div class="hd"><span>CHAT EN VIVO</span><span class="live">● LIVE</span></div>
+    <div id="msgs"></div>
+  </section>
+
+  <!-- 3. Marquee -->
+  <section class="glass mg" id="marq">
+    <div class="tag">ALERTAS</div>
+    <div class="win"><div id="track"></div></div>
+  </section>
+
+  <!-- Overlay de interrupción -->
+  <div id="intr"><div class="noise"></div><div id="pop"></div></div>
+</div>
+
+<button id="gear">⚙ PANEL</button>
+<div id="cfg">
+ <div class="top"><span>PANEL DEL DIRECTO</span><span id="x">✕</span></div>
+ <nav id="tabs"><a data-t="video" class="on">Video</a><a data-t="news">Noticias</a><a data-t="pics">Imágenes</a><a data-t="mq">Marquee</a><a data-t="chat">Chat</a><a data-t="set">Ajustes</a></nav>
+
+ <div class="tab on" id="t-video">
+  <label>URL o ID de YouTube, o enlace directo a un .mp4</label><input id="fVideo">
+  <small>Ejemplos: <code>9WeBjVASck0</code>, <code>https://youtu.be/ID</code>, <code>https://misitio.com/video.mp4</code>. Se aplica al instante al pegar. Bucle y sin sonido.</small>
+  <label>O elegir un video de tu PC</label><input type="file" id="fVidFile" accept="video/*">
+  <button id="bVidClr">Quitar video</button>
+  <small id="vStat" style="color:#ffd166"></small>
+  <small>El video local solo vive en esta pestaña. Para OBS, deja el campo vacío (fondo transparente) y pon tu video en una fuente de Medios de OBS debajo de esta capa.</small>
+ </div>
+
+ <div class="tab" id="t-news">
+  <label>Noticias manuales (una por línea: <code>@fuente | titular</code>)</label><textarea id="fNews"></textarea>
+  <label><input type="checkbox" id="fRssOn"> Usar noticias REALES desde un feed RSS</label>
+  <input id="fRss" placeholder="URL del feed RSS">
+  <small>Leer X/Twitter en directo exige su API de pago, por eso no está conectado. Alternativa: pega aquí los trinos que quieras mostrar, o activa un RSS (por defecto, Google Noticias sobre GTA 6) que trae titulares, fuente y hora reales.</small>
+ </div>
+
+ <div class="tab" id="t-pics">
+  <label>Subir imágenes o memes desde tu PC</label><input type="file" id="fPicFiles" accept="image/*" multiple>
+  <label>…o añadir por URL</label><input id="fPicUrl" placeholder="https://… .jpg/.png/.gif"><input id="fPicCap" placeholder="Texto/pie de foto (opcional)" style="margin-top:6px">
+  <button id="bPicAdd">+ Añadir URL</button>
+  <div id="picList"></div>
+  <small>Rotan solas cada 15–30 s. Las subidas se reducen a 1280 px y se guardan en el navegador (límite ~5 MB). Para muchas imágenes o GIF animados, usa URLs.</small>
+ </div>
+
+ <div class="tab" id="t-mq"><label>Frases y avisos de la cinta (una por línea)</label><textarea id="fMq"></textarea></div>
+
+ <div class="tab" id="t-chat">
+  <label>Modo del chat</label>
+  <select id="fChatMode"><option value="sim">Simulado (mensajes de ejemplo)</option><option value="yt">Chat REAL de tu directo de YouTube</option></select>
+  <label>ID o URL de tu directo (solo modo real)</label><input id="fChatId" placeholder="ID del live o URL">
+  <small>El modo real muestra el chat oficial de YouTube sin API. Funciona al abrir la página desde tu dominio (GitHub Pages) con el directo ya iniciado.</small>
+  <label>Mensajes simulados (uno por línea)</label><textarea id="fChat" style="height:120px"></textarea>
+  <label>Nombres simulados (uno por línea)</label><textarea id="fUsers" style="height:90px"></textarea>
+ </div>
+
+ <div class="tab" id="t-set">
+  <label>Interrupción cada (minutos)</label><input id="fInt" type="number" min="0.2" step="0.5">
+  <label>Duración (segundos)</label><input id="fDur" type="number" min="2" max="10">
+  <label>Fecha de lanzamiento</label><input id="fDate" type="datetime-local">
+  <label>Pop-ups (una por línea: <code>TÍTULO | texto</code>; la palabra <code>MEME</code> lanza un meme)</label><textarea id="fPop" style="height:110px"></textarea>
+  <button id="cTest">▶ Probar interrupción</button><button id="cExp">⬇ Exportar config.json</button>
+  <button id="cImpB">⬆ Importar</button><input type="file" id="cImp" accept=".json" style="display:none"><button id="cRst">Restablecer</button>
+  <small>Para OBS: exporta <code>config.json</code> y súbelo junto a index.html en GitHub; OBS lo carga solo (el navegador de OBS no comparte tus ajustes locales).</small>
+ </div>
+ <div class="foot"><button id="cSave">✔ Guardar y aplicar</button></div>
+</div>
+
+<script>
+/* =====================================================
+   DATOS PREDEFINIDOS (todo se puede cambiar desde el PANEL)
+   Noticias, chat y memes de ejemplo: FICTICIOS.
+   ===================================================== */
+const MEME_TEXTS=[["ME: solo un tráiler más","EL TRÁILER: 800 vistas y 30 teorías"],["Esperando GTA 6 desde 2013","Mi paciencia: ████░░ 60%"],["Mi cartera el día del lanzamiento","*se esconde*"],["NPC de Vice City","Me llamó 'oficial' y salió corriendo"],["Yo: dormir temprano","También yo: revisando noticias de Rockstar"],["Florida Man","Ahora con física realista"]];
+const PAL=[["#ff2bd6","#00f0ff"],["#ff7a18","#af002d"],["#00f0ff","#2b0a6b"],["#f9d423","#ff4e50"],["#7f00ff","#e100ff"],["#00c9a7","#005c97"]];
+const $=id=>document.getElementById(id);
+const esc=s=>String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;");
+const lines=t=>(t||"").split("\n").map(x=>x.trim()).filter(Boolean);
+function memeSVG(top,bot,[a,b]){
+  const svg=`<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="1120"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="${a}"/><stop offset="1" stop-color="${b}"/></linearGradient></defs><rect width="100%" height="100%" fill="url(#g)"/><circle cx="640" cy="560" r="330" fill="#fff3"/><text x="640" y="560" font-size="300" text-anchor="middle" dominant-baseline="middle">🌴</text><g font-family="Impact,Arial Black,sans-serif" font-size="78" font-weight="900" text-anchor="middle" fill="#fff" stroke="#000" stroke-width="8" paint-order="stroke"><text x="640" y="130">${esc(top)}</text><text x="640" y="1040">${esc(bot)}</text></g></svg>`;
+  return "data:image/svg+xml;charset=utf-8,"+encodeURIComponent(svg);
+}
+const DEF={
+  video:"QdBZY2fkU-0",interval:4,dur:4,date:"2026-11-19T00:00",
+  news:"@GTA6Insider | Fuentes de la comunidad hablan de un nuevo tráiler en preparación\n@RockstarFans | Vice City estrenará ciclo dinámico de clima y huracanes\n@LeonidaDaily | Rumor: modo online con heists cooperativos desde el día uno\n@GameLeaks_ES | Banda sonora: se espera licencia de más de 30 emisoras\n@VCBulletin | Lucía y Jason: análisis de cada detalle del último avance",
+  rssOn:false,rss:"https://news.google.com/rss/search?q=GTA+6+Rockstar&hl=es-419&gl=CO&ceid=CO:es-419",
+  pics:MEME_TEXTS.map((t,i)=>({src:memeSVG(t[0],t[1],PAL[i%6]),cap:"Meme de la comunidad #"+(i+1)})),
+  marquee:"¡Sigue el directo y deja tu teoría en el chat!\nCuenta regresiva activa: GTA VI llega el 19 de noviembre\nMeme del día: 'Mi billetera vs. el día 1'\nSuscríbete y activa la campana 🔔\nAviso: contenido de fans, no oficial",
+  chatMode:"sim",chatId:"",
+  chat:"¡Ya falta poco!\nEse tráiler sigue siendo una joya\njajaja el meme de la cartera 😂\nQuién más lleva horas aquí?\nVice City de noche se va a ver brutal\nRockstar, no nos falles\nSaludos desde Colombia 🇨🇴\nCuenta regresiva 🔥\nTeoría: habrá huracán en el mapa",
+  users:"VicePhantom\nLeonidaKid\nNeonTony\nLucia_Fan98\nMiamiVibes\nJasonGTA\nTurboPelao\nSunsetDrive\nMariaVC",
+  popups:"WEAZEL NEWS | ÚLTIMA HORA: fans de Vice City abarrotan el chat del directo\nWEAZEL NEWS | Reportan filas de jugadores… todavía sin consola nueva\nALERTA | ¡Suscríbete! Un fan anónimo asegura que trae el tráiler 3\nMEME\nMEME"
+};
+let S=JSON.parse(JSON.stringify(DEF));
+
+/* ===== Carga: DEF < config.json < localStorage < parámetros URL ===== */
+async function load(){
+  try{const r=await fetch("config.json",{cache:"no-store"});if(r.ok)Object.assign(S,await r.json())}catch(e){}
+  try{Object.assign(S,JSON.parse(localStorage.getItem("gta6cfg")||"{}"))}catch(e){}
+  const q=new URLSearchParams(location.search);
+  if(q.get("video"))S.video=q.get("video");
+  if(q.get("interval"))S.interval=+q.get("interval");
+  if(q.get("dur"))S.dur=+q.get("dur");
+}
+if(window.obsstudio||/[?&]panel=0/.test(location.search))document.body.classList.add("obs"); // OBS: sin botón
+
+/* ===== Escala 16:9 ===== */
+function fit(){$("stage").style.transform=`translate(-50%,-50%) scale(${Math.min(innerWidth/1920,innerHeight/1080)})`}
+addEventListener("resize",fit);fit();
+
+/* ===== VIDEO ===== */
+let LOCAL=null;
+function vstat(t){const e=$("vStat");if(e)e.textContent=t}
+function setVideo(){
+  const bg=$("bg"),v=(S.video||"").trim();
+  document.body.classList.toggle("nobg",!v&&!LOCAL);       // sin video: fondo transparente (para OBS)
+  if(LOCAL||/\.(mp4|webm|ogg)(\?.*)?$/i.test(v)){
+    bg.innerHTML=`<video src="${LOCAL||esc(v)}" autoplay muted loop playsinline></video>`;vstat(LOCAL?"▶ Video local cargado (solo esta sesión)":"▶ Archivo de video");return;
+  }
+  if(!v){bg.innerHTML="";vstat("Sin video: fondo transparente");return}
+  const m=v.match(/(?:v=|youtu\.be\/|embed\/|shorts\/|live\/)([\w-]{11})/)||v.match(/^([\w-]{11})$/);
+  if(!m){bg.innerHTML="";vstat("⚠ No reconozco ese enlace o ID");return}
+  const id=m[1],t=(v.match(/[?&#]t=(\d+)/)||[])[1],http=/^https?:/.test(location.protocol);
+  bg.innerHTML=`<iframe referrerpolicy="strict-origin-when-cross-origin" allow="autoplay; encrypted-media; picture-in-picture" src="https://www.youtube.com/embed/${id}?autoplay=1&mute=1&loop=1&playlist=${id}&controls=0&rel=0&playsinline=1${t?"&start="+t:""}${http?"&origin="+encodeURIComponent(location.origin):""}"></iframe>`;
+  vstat(http?"▶ YouTube: "+id+" (si sale pantalla negra o error, el dueño no permite incrustarlo)":"⚠ Abriste el archivo con doble clic (file://): YouTube bloquea el video así. Usa GitHub Pages o un servidor local.");
+}
+
+/* ===== NOTICIAS: manuales o RSS real ===== */
+let NI=[],ni=0,newsT;
+const ago=d=>{const m=Math.max(1,Math.round((Date.now()-new Date(String(d).replace(" ","T")+"Z"))/6e4));return m<60?`hace ${m} min`:m<1440?`hace ${Math.round(m/60)} h`:`hace ${Math.round(m/1440)} d`};
+async function loadNews(){
+  NI=lines(S.news).map((l,i)=>{const p=l.split("|"),h=p.length>1;return{s:h?p[0].trim():"@Noticias",t:(h?p.slice(1).join("|"):l).trim(),time:`hace ${3+i*13} min`}});
+  if(S.rssOn&&S.rss){
+    try{
+      const j=await(await fetch("https://api.rss2json.com/v1/api.json?rss_url="+encodeURIComponent(S.rss))).json();
+      if(j.items&&j.items.length)NI=j.items.slice(0,12).map(it=>{const p=it.title.split(" - "),src=p.length>1?p.pop():"Noticias";return{s:src,t:p.join(" - "),time:ago(it.pubDate)}});
+    }catch(e){}
+  }
+  $("newsBody").innerHTML=NI.map(n=>`<div class="card"><div class="src">${esc(n.s)}<span>· ${n.time}</span></div><h3>${esc(n.t)}</h3></div>`).join("");
+  ni=0;showNews();
+}
+function showNews(){
+  const c=[...document.querySelectorAll("#newsBody .card")];if(!c.length)return;
+  c.forEach((e,i)=>e.classList.toggle("on",i===ni));ni=(ni+1)%c.length;
+}
+setInterval(showNews,6500);
+setInterval(()=>{if(S.rssOn)loadNews()},600000); // refresca RSS cada 10 min
+
+/* ===== IMÁGENES ===== */
+let pi=0,picT;
+function buildPics(){
+  $("picBody").querySelectorAll("img").forEach(e=>e.remove());
+  S.pics.forEach(p=>{const im=new Image();im.src=p.src;$("picBody").insertBefore(im,$("picCap"))});
+  clearTimeout(picT);pi=0;showPic();
+}
+function showPic(){
+  if(!S.pics.length){$("picCap").textContent="";return}
+  $("picBody").querySelectorAll("img").forEach((e,i)=>e.classList.toggle("on",i===pi));
+  $("picCap").textContent=S.pics[pi].cap||"";pi=(pi+1)%S.pics.length;
+  picT=setTimeout(showPic,15000+Math.random()*15000);
+}
+
+/* ===== MARQUEE ===== */
+function buildMarquee(){
+  const L=lines(S.marquee);$("track").innerHTML=[...L,...L].map(t=>`<span>${esc(t)}</span>`).join("");
+  $("track").style.animationDuration=Math.max(30,$("track").scrollWidth/2/90)+"s";
+}
+
+/* ===== CUENTA REGRESIVA ===== */
+function tick(){
+  const ms=Math.max(0,new Date(S.date)-Date.now()),p=n=>String(n).padStart(2,"0");
+  $("d").textContent=p(Math.floor(ms/864e5));$("h").textContent=p(Math.floor(ms/36e5)%24);
+  $("mi").textContent=p(Math.floor(ms/6e4)%60);$("s").textContent=p(Math.floor(ms/1e3)%60);
+}
+setInterval(tick,1000);
+
+/* ===== CHAT: simulado o REAL (chat oficial de YouTube) ===== */
+let chatT;const COL=["#00f0ff","#ff2bd6","#f9d423","#7CFC00","#ff7a18","#b388ff"];
+function startChat(){
+  clearTimeout(chatT);const box=$("msgs");box.innerHTML="";
+  const id=((S.chatId||"").match(/(?:v=|live\/|youtu\.be\/)([\w-]{11})/)||(S.chatId||"").match(/^([\w-]{11})$/)||[])[1];
+  if(S.chatMode==="yt"&&id){
+    box.style.padding="0";
+    box.innerHTML=`<iframe src="https://www.youtube.com/live_chat?v=${id}&embed_domain=${location.hostname||"localhost"}&dark_theme=1" style="width:100%;height:100%;border:0"></iframe>`;return;
+  }
+  box.style.padding="";const U=lines(S.users),C=lines(S.chat);if(!U.length||!C.length)return;
+  (function add(){
+    const u=U[Math.random()*U.length|0],c=COL[Math.random()*6|0],d=document.createElement("div");d.className="m";
+    d.innerHTML=`<div class="av" style="background:${c}">${esc(u[0])}</div><p><b>${esc(u)}</b>${esc(C[Math.random()*C.length|0])}</p>`;
+    box.appendChild(d);while(box.children.length>11)box.firstChild.remove();
+    chatT=setTimeout(add,1200+Math.random()*2200);
+  })();
+}
+
+/* ===== INTERRUPCIÓN ANTI-COPYRIGHT ===== */
+let busy=false,timer;
+function interrupt(){
+  if(busy)return;busy=true;
+  const L=lines(S.popups),pick=L.length?L[Math.random()*L.length|0]:"MEME",box=$("pop"),o=$("intr");
+  if(pick==="MEME"&&S.pics.length)box.innerHTML=`<div class="k">MEME SORPRESA</div><img src="${S.pics[Math.random()*S.pics.length|0].src}">`;
+  else{const p=pick.split("|");box.innerHTML=`<div class="k">${esc(p.length>1?p[0].trim():"ALERTA")}</div><h2>${esc(p.length>1?p.slice(1).join("|").trim():pick)}</h2>`}
+  o.className="on glitch";setTimeout(()=>o.classList.remove("glitch"),1500);
+  setTimeout(()=>{o.className="";busy=false},S.dur*1000);
+}
+function schedule(){clearInterval(timer);timer=setInterval(interrupt,Math.max(.2,S.interval)*60000)}
+
+/* ===== PANEL ===== */
+const F={fVideo:"video",fRss:"rss",fNews:"news",fMq:"marquee",fChatMode:"chatMode",fChatId:"chatId",fChat:"chat",fUsers:"users",fInt:"interval",fDur:"dur",fDate:"date",fPop:"popups"};
+function fill(){
+  for(const k in F)$(k).value=S[F[k]]??"";
+  $("fRssOn").checked=!!S.rssOn;renderPicList();
+}
+function renderPicList(){
+  $("picList").innerHTML=S.pics.map((p,i)=>`<div class="pl"><img src="${p.src}"><span>${esc(p.cap||"(sin texto)")}</span><b data-i="${i}">✕</b></div>`).join("");
+}
+$("picList").onclick=e=>{if(e.target.dataset.i!==undefined){S.pics.splice(+e.target.dataset.i,1);renderPicList()}};
+$("bPicAdd").onclick=()=>{const u=$("fPicUrl").value.trim();if(!u)return;S.pics.push({src:u,cap:$("fPicCap").value.trim()});$("fPicUrl").value=$("fPicCap").value="";renderPicList()};
+$("fPicFiles").onchange=e=>[...e.target.files].forEach(f=>{
+  const r=new FileReader();r.onload=()=>{const im=new Image();im.onload=()=>{
+    const k=Math.min(1,1280/Math.max(im.width,im.height)),c=document.createElement("canvas");c.width=im.width*k;c.height=im.height*k;
+    c.getContext("2d").drawImage(im,0,0,c.width,c.height);S.pics.push({src:c.toDataURL("image/jpeg",.8),cap:f.name.replace(/\.\w+$/,"")});renderPicList();
+  };im.src=r.result};r.readAsDataURL(f);
+});
+function applyAll(){setVideo();loadNews();buildPics();buildMarquee();startChat();schedule();tick()}
+function persist(){try{localStorage.setItem("gta6cfg",JSON.stringify(S))}catch(e){alert("No cabe en el navegador (demasiadas imágenes subidas). Usa URLs o exporta config.json.")}}
+$("cSave").onclick=()=>{
+  for(const k in F){const v=$(k).value;S[F[k]]=["interval","dur"].includes(F[k])?(+v||DEF[F[k]]):v}
+  S.rssOn=$("fRssOn").checked;S.date=S.date||DEF.date;persist();applyAll();
+};
+$("gear").onclick=()=>$("cfg").classList.toggle("on");
+$("x").onclick=()=>$("cfg").classList.remove("on");
+document.querySelectorAll("#tabs a").forEach(a=>a.onclick=()=>{
+  document.querySelectorAll("#tabs a,.tab").forEach(e=>e.classList.remove("on"));a.classList.add("on");$("t-"+a.dataset.t).classList.add("on");
+});
+$("cTest").onclick=interrupt;
+$("cExp").onclick=()=>{const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([JSON.stringify(S,null,1)],{type:"application/json"}));a.download="config.json";a.click()};
+$("cImpB").onclick=()=>$("cImp").click();
+$("cImp").onchange=e=>{const r=new FileReader();r.onload=()=>{try{Object.assign(S,JSON.parse(r.result));fill();persist();applyAll()}catch(x){alert("JSON no válido")}};r.readAsText(e.target.files[0])};
+$("cRst").onclick=()=>{if(confirm("¿Borrar tus ajustes guardados?")){try{localStorage.removeItem("gta6cfg")}catch(e){}location.reload()}};
+addEventListener("keydown",e=>{
+  if(/INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName))return;
+  if(/^c$/i.test(e.key))$("cfg").classList.toggle("on");
+  if(/^t$/i.test(e.key))interrupt();
+});
+
+/* ===== VIDEO: aplicación inmediata ===== */
+let vt;
+$("fVideo").oninput=()=>{clearTimeout(vt);vt=setTimeout(()=>{LOCAL=null;S.video=$("fVideo").value;persist();setVideo()},400)};
+$("fVidFile").onchange=e=>{const f=e.target.files[0];if(!f)return;if(LOCAL)URL.revokeObjectURL(LOCAL);LOCAL=URL.createObjectURL(f);setVideo()};
+$("bVidClr").onclick=()=>{LOCAL=null;S.video="";$("fVideo").value="";$("fVidFile").value="";persist();setVideo()};
+
+/* ===== ARRANQUE ===== */
+(async()=>{await load();fill();applyAll()})();
+</script>
+</body>
+</html>
