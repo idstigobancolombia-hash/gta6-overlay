@@ -101,6 +101,11 @@ body.obs #gear{display:none}
 .pl b{cursor:pointer;color:#ff6b6b;padding:4px 8px}
 body.nobg,body.nobg html,body.nobg #stage{background:transparent!important}
 html:has(body.nobg){background:transparent}
+#track .stk{padding:0 34px;display:flex;align-items:center}
+#track .stk::after{content:none}
+#track .stk img{animation:wob 1.6s ease-in-out infinite;transform-origin:50% 100%;filter:drop-shadow(0 0 8px var(--cy))}
+@keyframes wob{0%,100%{transform:rotate(-7deg) scale(1)}50%{transform:rotate(7deg) scale(1.08)}}
+body.edit .glass{outline:3px dashed #fff;cursor:move}
 </style>
 </head>
 <body>
@@ -147,11 +152,14 @@ html:has(body.nobg){background:transparent}
 <button id="gear">⚙ PANEL</button>
 <div id="cfg">
  <div class="top"><span>PANEL DEL DIRECTO</span><span id="x">✕</span></div>
- <nav id="tabs"><a data-t="video" class="on">Video</a><a data-t="news">Noticias</a><a data-t="pics">Imágenes</a><a data-t="mq">Marquee</a><a data-t="chat">Chat</a><a data-t="set">Ajustes</a></nav>
+ <nav id="tabs"><a data-t="video" class="on">Video</a><a data-t="news">Noticias</a><a data-t="pics">Imágenes</a><a data-t="mq">Marquee</a><a data-t="chat">Chat</a><a data-t="lay">Diseño</a><a data-t="set">Ajustes</a></nav>
 
  <div class="tab on" id="t-video">
   <label>URL o ID de YouTube, o enlace directo a un .mp4</label><input id="fVideo">
   <small>Ejemplos: <code>9WeBjVASck0</code>, <code>https://youtu.be/ID</code>, <code>https://misitio.com/video.mp4</code>. Se aplica al instante al pegar. Bucle y sin sonido.</small>
+  <label>Volumen</label><input type="range" id="fVol" min="0" max="100">
+  <label style="display:flex;gap:8px;align-items:center"><input type="checkbox" id="fMute" style="width:auto"> Silenciar</label>
+  <small>Con sonido, un navegador normal puede pedir un clic en la página; OBS no. En OBS marca «Controlar audio mediante OBS» en la fuente para verlo en el mezclador.</small>
   <label>O elegir un video de tu PC</label><input type="file" id="fVidFile" accept="video/*">
   <button id="bVidClr">Quitar video</button>
   <small id="vStat" style="color:#ffd166"></small>
@@ -173,7 +181,12 @@ html:has(body.nobg){background:transparent}
   <small>Rotan solas cada 15–30 s. Las subidas se reducen a 1280 px y se guardan en el navegador (límite ~5 MB). Para muchas imágenes o GIF animados, usa URLs.</small>
  </div>
 
- <div class="tab" id="t-mq"><label>Frases y avisos de la cinta (una por línea)</label><textarea id="fMq"></textarea></div>
+ <div class="tab" id="t-mq"><label>Frases y avisos de la cinta (una por línea)</label><textarea id="fMq" style="height:120px"></textarea>
+  <label>Stickers PNG que pasan dentro de la cinta (fondo transparente)</label><input type="file" id="fStk" accept="image/png,image/webp,image/gif">
+  <input id="fStkUrl" placeholder="…o URL de un PNG" style="margin-top:6px"><input id="fStkCap" placeholder="Texto junto al sticker (opcional)" style="margin-top:6px">
+  <button id="bStkAdd">+ Añadir URL</button><div id="stkList"></div>
+  <label>Alto del sticker (px)</label><input id="fStkH" type="number" min="30" max="200">
+  <small>Se mueven con la cinta y se balancean como un meme animado. Para verlos más grandes, agranda la cinta en la pestaña Diseño.</small></div>
 
  <div class="tab" id="t-chat">
   <label>Modo del chat</label>
@@ -192,6 +205,12 @@ html:has(body.nobg){background:transparent}
   <button id="cTest">▶ Probar interrupción</button><button id="cExp">⬇ Exportar config.json</button>
   <button id="cImpB">⬆ Importar</button><input type="file" id="cImp" accept=".json" style="display:none"><button id="cRst">Restablecer</button>
   <small>Para OBS: exporta <code>config.json</code> y súbelo junto a index.html en GitHub; OBS lo carga solo (el navegador de OBS no comparte tus ajustes locales).</small>
+ </div>
+ <div class="tab" id="t-lay">
+  <label>Elementos en pantalla (visible y tamaño)</label><div id="layList"></div>
+  <label>Transparencia de los paneles</label><input type="range" id="fAlpha" min="15" max="95">
+  <button id="bMove">✥ Mover paneles con el ratón</button><button id="lReset">Restablecer diseño</button>
+  <small>«Mover» oculta el panel: arrastra cada elemento y pulsa ✔ TERMINAR arriba. En OBS, exporta config.json para conservar el diseño.</small>
  </div>
  <div class="foot"><button id="cSave">✔ Guardar y aplicar</button></div>
 </div>
@@ -216,7 +235,7 @@ const DEF={
   rssOn:false,rss:"https://news.google.com/rss/search?q=GTA+6+Rockstar&hl=es-419&gl=CO&ceid=CO:es-419",
   pics:MEME_TEXTS.map((t,i)=>({src:memeSVG(t[0],t[1],PAL[i%6]),cap:"Meme de la comunidad #"+(i+1)})),
   marquee:"¡Sigue el directo y deja tu teoría en el chat!\nCuenta regresiva activa: GTA VI llega el 19 de noviembre\nMeme del día: 'Mi billetera vs. el día 1'\nSuscríbete y activa la campana 🔔\nAviso: contenido de fans, no oficial",
-  chatMode:"sim",chatId:"",
+  chatMode:"sim",chatId:"",vol:60,mute:true,alpha:.72,stkH:76,stk:[],lay:{},
   chat:"¡Ya falta poco!\nEse tráiler sigue siendo una joya\njajaja el meme de la cartera 😂\nQuién más lleva horas aquí?\nVice City de noche se va a ver brutal\nRockstar, no nos falles\nSaludos desde Colombia 🇨🇴\nCuenta regresiva 🔥\nTeoría: habrá huracán en el mapa",
   users:"VicePhantom\nLeonidaKid\nNeonTony\nLucia_Fan98\nMiamiVibes\nJasonGTA\nTurboPelao\nSunsetDrive\nMariaVC",
   popups:"WEAZEL NEWS | ÚLTIMA HORA: fans de Vice City abarrotan el chat del directo\nWEAZEL NEWS | Reportan filas de jugadores… todavía sin consola nueva\nALERTA | ¡Suscríbete! Un fan anónimo asegura que trae el tráiler 3\nMEME\nMEME"
@@ -245,13 +264,13 @@ function setVideo(){
   const bg=$("bg"),v=(S.video||"").trim();
   document.body.classList.toggle("nobg",!v&&!LOCAL);       // sin video: fondo transparente (para OBS)
   if(LOCAL||/\.(mp4|webm|ogg)(\?.*)?$/i.test(v)){
-    bg.innerHTML=`<video src="${LOCAL||esc(v)}" autoplay muted loop playsinline></video>`;vstat(LOCAL?"▶ Video local cargado (solo esta sesión)":"▶ Archivo de video");return;
+    bg.innerHTML=`<video src="${LOCAL||esc(v)}" autoplay loop playsinline></video>`;vidVol();vstat(LOCAL?"▶ Video local cargado (solo esta sesión)":"▶ Archivo de video");return;
   }
   if(!v){bg.innerHTML="";vstat("Sin video: fondo transparente");return}
   const m=v.match(/(?:v=|youtu\.be\/|embed\/|shorts\/|live\/)([\w-]{11})/)||v.match(/^([\w-]{11})$/);
   if(!m){bg.innerHTML="";vstat("⚠ No reconozco ese enlace o ID");return}
   const id=m[1],t=(v.match(/[?&#]t=(\d+)/)||[])[1],http=/^https?:/.test(location.protocol);
-  bg.innerHTML=`<iframe referrerpolicy="strict-origin-when-cross-origin" allow="autoplay; encrypted-media; picture-in-picture" src="https://www.youtube.com/embed/${id}?autoplay=1&mute=1&loop=1&playlist=${id}&controls=0&rel=0&playsinline=1${t?"&start="+t:""}${http?"&origin="+encodeURIComponent(location.origin):""}"></iframe>`;
+  bg.innerHTML=`<iframe onload="ytVol()" referrerpolicy="strict-origin-when-cross-origin" allow="autoplay; encrypted-media; picture-in-picture" src="https://www.youtube.com/embed/${id}?autoplay=1&mute=1&loop=1&playlist=${id}&controls=0&rel=0&playsinline=1&enablejsapi=1${t?"&start="+t:""}${http?"&origin="+encodeURIComponent(location.origin):""}"></iframe>`;
   vstat(http?"▶ YouTube: "+id+" (si sale pantalla negra o error, el dueño no permite incrustarlo)":"⚠ Abriste el archivo con doble clic (file://): YouTube bloquea el video así. Usa GitHub Pages o un servidor local.");
 }
 
@@ -291,9 +310,13 @@ function showPic(){
 }
 
 /* ===== MARQUEE ===== */
+const stkHTML=k=>`<span class="stk"><img src="${k.src}" style="height:${S.stkH||76}px"></span>${k.cap?`<span>${esc(k.cap)}</span>`:""}`;
 function buildMarquee(){
-  const L=lines(S.marquee);$("track").innerHTML=[...L,...L].map(t=>`<span>${esc(t)}</span>`).join("");
-  $("track").style.animationDuration=Math.max(30,$("track").scrollWidth/2/90)+"s";
+  const L=lines(S.marquee),K=S.stk||[],it=[],step=Math.max(1,Math.floor(L.length/(K.length||1)));let j=0;
+  L.forEach((t,i)=>{it.push(`<span>${esc(t)}</span>`);if(j<K.length&&(i+1)%step===0)it.push(stkHTML(K[j++]))});
+  while(j<K.length)it.push(stkHTML(K[j++]));
+  const h=it.join("");$("track").innerHTML=h+h;
+  const d=()=>$("track").style.animationDuration=Math.max(30,$("track").scrollWidth/2/90)+"s";d();setTimeout(d,900);
 }
 
 /* ===== CUENTA REGRESIVA ===== */
@@ -351,13 +374,13 @@ $("fPicFiles").onchange=e=>[...e.target.files].forEach(f=>{
     c.getContext("2d").drawImage(im,0,0,c.width,c.height);S.pics.push({src:c.toDataURL("image/jpeg",.8),cap:f.name.replace(/\.\w+$/,"")});renderPicList();
   };im.src=r.result};r.readAsDataURL(f);
 });
-function applyAll(){setVideo();loadNews();buildPics();buildMarquee();startChat();schedule();tick()}
+function applyAll(){applyLay();setVideo();loadNews();buildPics();buildMarquee();startChat();schedule();tick()}
 function persist(){try{localStorage.setItem("gta6cfg",JSON.stringify(S))}catch(e){alert("No cabe en el navegador (demasiadas imágenes subidas). Usa URLs o exporta config.json.")}}
 $("cSave").onclick=()=>{
   for(const k in F){const v=$(k).value;S[F[k]]=["interval","dur"].includes(F[k])?(+v||DEF[F[k]]):v}
   S.rssOn=$("fRssOn").checked;S.date=S.date||DEF.date;persist();applyAll();
 };
-$("gear").onclick=()=>$("cfg").classList.toggle("on");
+$("gear").onclick=()=>{if(edit){edit=false;document.body.classList.remove("edit");$("gear").textContent="⚙ PANEL";$("cfg").classList.add("on")}else $("cfg").classList.toggle("on")};
 $("x").onclick=()=>$("cfg").classList.remove("on");
 document.querySelectorAll("#tabs a").forEach(a=>a.onclick=()=>{
   document.querySelectorAll("#tabs a,.tab").forEach(e=>e.classList.remove("on"));a.classList.add("on");$("t-"+a.dataset.t).classList.add("on");
@@ -372,6 +395,54 @@ addEventListener("keydown",e=>{
   if(/^c$/i.test(e.key))$("cfg").classList.toggle("on");
   if(/^t$/i.test(e.key))interrupt();
 });
+
+/* ===== AUDIO ===== */
+function vidVol(){const v=$("bg").querySelector("video");if(v){v.volume=S.vol/100;v.muted=!!S.mute;v.play().catch(()=>{v.muted=true})}}
+function ytVol(){
+  const f=$("bg").querySelector("iframe");if(!f)return;
+  const c=(fn,a)=>{try{f.contentWindow.postMessage(JSON.stringify({event:"command",func:fn,args:a||[]}),"*")}catch(e){}};
+  [0,1000,3000].forEach(ms=>setTimeout(()=>{c("setVolume",[S.vol]);c(S.mute?"mute":"unMute")},ms));
+}
+const applyVol=()=>{vidVol();ytVol()};
+$("fVol").oninput=()=>{S.vol=+$("fVol").value;S.mute=false;$("fMute").checked=false;persist();applyVol()};
+$("fMute").onchange=()=>{S.mute=$("fMute").checked;persist();applyVol()};
+
+/* ===== DISEÑO: mostrar/ocultar, tamaño, mover, transparencia ===== */
+let edit=false,drag=null;
+const LAY={news:["Noticias","0 0"],pics:["Imágenes","0 0"],cd:["Cuenta regresiva","100% 0"],chat:["Chat","100% 0"],marq:["Cinta inferior","0 100%"]};
+const lay=id=>Object.assign({on:true,k:1,x:0,y:0},S.lay&&S.lay[id]);
+function applyLay(){
+  for(const id in LAY){const L=lay(id),e=$(id);e.style.display=L.on?"":"none";e.style.transformOrigin=LAY[id][1];e.style.transform=`translate(${L.x}px,${L.y}px) scale(${L.k})`}
+  document.documentElement.style.setProperty("--bg",`rgba(10,6,28,${S.alpha})`);
+}
+function layRows(){
+  $("layList").innerHTML=Object.keys(LAY).map(id=>{const L=lay(id);return `<div class="pl"><input type="checkbox" data-id="${id}" data-f="on" ${L.on?"checked":""} style="width:auto"><span>${LAY[id][0]}</span><input type="range" min="30" max="160" value="${Math.round(L.k*100)}" data-id="${id}" data-f="k" style="width:170px"></div>`}).join("");
+}
+$("layList").oninput=e=>{const t=e.target,d=t.dataset;if(!d.id)return;S.lay=S.lay||{};const L=S.lay[d.id]=lay(d.id);L[d.f]=d.f==="on"?t.checked:t.value/100;persist();applyLay()};
+$("fAlpha").oninput=()=>{S.alpha=$("fAlpha").value/100;persist();applyLay()};
+$("lReset").onclick=()=>{S.lay={};S.alpha=.72;$("fAlpha").value=72;layRows();persist();applyLay()};
+$("bMove").onclick=()=>{edit=true;document.body.classList.add("edit");$("cfg").classList.remove("on");$("gear").textContent="✔ TERMINAR"};
+document.querySelectorAll(".glass").forEach(el=>el.addEventListener("pointerdown",e=>{
+  if(!edit||!LAY[el.id])return;const L=lay(el.id);drag={id:el.id,sx:e.clientX,sy:e.clientY,ox:L.x,oy:L.y,sc:Math.min(innerWidth/1920,innerHeight/1080)};e.preventDefault();
+}));
+addEventListener("pointermove",e=>{if(!drag)return;S.lay=S.lay||{};const L=S.lay[drag.id]=lay(drag.id);L.x=Math.round(drag.ox+(e.clientX-drag.sx)/drag.sc);L.y=Math.round(drag.oy+(e.clientY-drag.sy)/drag.sc);applyLay()});
+addEventListener("pointerup",()=>{if(drag){drag=null;persist()}});
+
+/* ===== STICKERS PNG en la cinta ===== */
+function stkList(){$("stkList").innerHTML=(S.stk||[]).map((k,i)=>`<div class="pl"><img src="${k.src}" style="width:44px;height:44px;object-fit:contain;background:#222"><span>${esc(k.cap||"(sin texto)")}</span><b data-i="${i}">✕</b></div>`).join("")}
+const stkChanged=()=>{stkList();persist();buildMarquee()};
+$("stkList").onclick=e=>{if(e.target.dataset.i!==undefined){S.stk.splice(+e.target.dataset.i,1);stkChanged()}};
+$("bStkAdd").onclick=()=>{const u=$("fStkUrl").value.trim();if(!u)return;S.stk.push({src:u,cap:$("fStkCap").value.trim()});$("fStkUrl").value="";stkChanged()};
+$("fStkH").oninput=()=>{S.stkH=+$("fStkH").value||76;persist();buildMarquee()};
+$("fStk").onchange=e=>[...e.target.files].forEach(f=>{
+  const r=new FileReader(),cap=$("fStkCap").value.trim();
+  r.onload=()=>{
+    if(f.type==="image/gif"&&f.size<700000){S.stk.push({src:r.result,cap});stkChanged();return}   // GIF: se conserva animado
+    const im=new Image();im.onload=()=>{const k=Math.min(1,320/Math.max(im.width,im.height)),c=document.createElement("canvas");c.width=im.width*k;c.height=im.height*k;c.getContext("2d").drawImage(im,0,0,c.width,c.height);S.stk.push({src:c.toDataURL("image/png"),cap});stkChanged()};im.src=r.result;
+  };r.readAsDataURL(f);
+});
+const _fill=fill;
+fill=function(){_fill();$("fVol").value=S.vol;$("fMute").checked=!!S.mute;$("fAlpha").value=Math.round(S.alpha*100);$("fStkH").value=S.stkH;layRows();stkList()};
 
 /* ===== VIDEO: aplicación inmediata ===== */
 let vt;
